@@ -1,0 +1,12 @@
+// Allow plugins to declare Maven dependencies via build-extras.gradle.
+allprojects {
+    repositories {
+        maven {
+           url "https://dl.bintray.com/stojan/android"
+        }
+    }
+}
+
+dependencies {
+  implementation 'com.github.hf:leveldb:1.19.0@aar'
+}
