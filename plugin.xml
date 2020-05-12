@@ -25,7 +25,7 @@
             </feature>
         </config-file>
 
-        <framework src="./plugins/cordova-plugin-crosswalk-data-migration/build-extras.gradle" custom="true" type="gradleReference" />
+        <framework src="./build-extras.gradle" custom="true" type="gradleReference" />
         <source-file src="src/Migration.java" target-dir="src/cordova/plugins/crosswalk" />
     </platform>
 </plugin>
