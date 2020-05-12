@@ -17,6 +17,8 @@ import org.apache.cordova.CordovaWebView;
 
 import java.io.File;
 
+import com.github.hf.LevelDB;
+
 public class Migration extends CordovaPlugin {
 
     public static final String TAG = "Migration";
@@ -109,13 +111,23 @@ public class Migration extends CordovaPlugin {
             Log.d(TAG, "Moved Local Storage from XWalk to System Webview, now migrating from sqlite local storage to leveldb local storage");
             SQLiteDatabase ls = null;
             Cursor results = null;
+            LevelDB levelDB = null;
             try {
                 ls = SQLiteDatabase.openDatabase(constructFilePaths(webviewRoot, getWebviewLocalStoragePath()).getAbsolutePath() + "/file__0.localstorage", null, SQLiteDatabase.OPEN_READONLY);
                 results = ls.rawQuery("SELECT * FROM ItemTable", null);
+                levelDB = LevelDB.open(webviewRoot.getAbsolutePath() + "/app_webview/Default/Local Storage/LevelDB", LevelDB.configure().createIfMissing(true));
                 while(results.moveToNext()) {
                     Log.d(TAG, "Local Storage Key:" + results.getString(0));
                     byte[] aBlobVariableThatIWillDoAbsolutelyNothingWithPeriodSmileyFace = results.getBlob(1);
                     Log.d(TAG, "Local Storage Value: this is a blob and can't really be displayed but, if you are seeing this message, we successfully got the blob from the result set.");
+
+                    levelDB.put("leveldb".getBytes(), "Is awesome!".getBytes());
+                    String value = levelDB.get("leveldb".getBytes());
+
+                    leveldb.put("magic".getBytes(), new byte[] { 0, 1, 2, 3, 4 });
+                    byte[] magic = levelDB.getBytes("magic".getBytes());
+
+                    Log.d(TAG, "Used LevelDB");
                 };
             } catch (Exception e) {
                 Log.d(TAG, "Something went wrong. Here is an error message. " + e.getMessage());
@@ -125,6 +137,9 @@ public class Migration extends CordovaPlugin {
                 }
                 if (ls != null) {
                     ls.close();
+                }
+                if (levelDB != null) {
+                    levelDB.close();
                 }
             }
             Log.d(TAG, "Finished migrating from localstorage to leveldb.");
