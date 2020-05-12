@@ -8,6 +8,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Build;
 import android.util.Log;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.Cursor;
 
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
@@ -104,7 +106,28 @@ public class Migration extends CordovaPlugin {
         if(testFileExists(XWalkRoot, modernLocalStorageDir)){
             Log.d(TAG, "Local Storage data found");
             moveDirFromXWalkToWebView(modernLocalStorageDir, getWebviewLocalStoragePath());
-            Log.d(TAG, "Moved Local Storage from XWalk to System Webview");
+            Log.d(TAG, "Moved Local Storage from XWalk to System Webview, now migrating from sqlite local storage to leveldb local storage");
+            SQLiteDatabase ls = null;
+            Cursor results = null;
+            try {
+                ls = SQLiteDatabase.openDatabase(constructFilePaths(webviewRoot, getWebviewLocalStoragePath()).getAbsolutePath() + "/file__0.localstorage", null, SQLiteDatabase.OPEN_READONLY);
+                results = ls.rawQuery("SELECT * FROM ItemTable", null);
+                while(results.moveToNext()) {
+                    Log.d(TAG, "Local Storage Key:" + results.getString(0));
+                    byte[] aBlobVariableThatIWillDoAbsolutelyNothingWithPeriodSmileyFace = results.getBlob(1);
+                    Log.d(TAG, "Local Storage Value: this is a blob and can't really be displayed but, if you are seeing this message, we successfully got the blob from the result set.");
+                };
+            } catch (Exception e) {
+                Log.d(TAG, "Something went wrong. Here is an error message. " + e.getMessage());
+            } finally {
+                if (results != null) {
+                    results.close();
+                }
+                if (ls != null) {
+                    ls.close();
+                }
+            }
+            Log.d(TAG, "Finished migrating from localstorage to leveldb.");
             hasMigratedData = true;
         }
 
