@@ -17,7 +17,8 @@ import org.apache.cordova.CordovaWebView;
 
 import java.io.File;
 
-import com.github.hf.LevelDB;
+import com.github.hf.leveldb.LevelDB;
+import com.github.hf.leveldb.Iterator;
 
 public class Migration extends CordovaPlugin {
 
@@ -98,34 +99,48 @@ public class Migration extends CordovaPlugin {
         return found;
     }
 
-    private void migrateData(){
+     private void migrateData(){
         XWalkRoot = constructFilePaths(appRoot, XwalkPath);
-
         webviewRoot = constructFilePaths(appRoot, getWebviewPath());
 
         boolean hasMigratedData = false;
 
         if(testFileExists(XWalkRoot, modernLocalStorageDir)){
-            Log.d(TAG, "Local Storage data found");
-            moveDirFromXWalkToWebView(modernLocalStorageDir, getWebviewLocalStoragePath());
-            Log.d(TAG, "Moved Local Storage from XWalk to System Webview, now migrating from sqlite local storage to leveldb local storage");
+            File target = new File("/data/data/com.totalpave.iripg/app_webview/Default/Local Storage/leveldb");
+            if (target.exists()) {
+                deleteRecursive(target);
+            }
+
+            Log.d(TAG, "Migrating from sqlite local storage to leveldb local storage");
             SQLiteDatabase ls = null;
             Cursor results = null;
-            LevelDB levelDB = null;
+            LevelDB db = null;
             try {
-                ls = SQLiteDatabase.openDatabase(constructFilePaths(webviewRoot, getWebviewLocalStoragePath()).getAbsolutePath() + "/file__0.localstorage", null, SQLiteDatabase.OPEN_READONLY);
+                ls = SQLiteDatabase.openDatabase(constructFilePaths(XWalkRoot, getWebviewLocalStoragePath()).getAbsolutePath() + "/file__0.localstorage", null, SQLiteDatabase.OPEN_READONLY);
                 results = ls.rawQuery("SELECT * FROM ItemTable", null);
-                levelDB = LevelDB.open(webviewRoot.getAbsolutePath() + "/app_webview/Default/Local Storage/LevelDB", LevelDB.configure().createIfMissing(true));
+                Log.d(TAG, "leveldb file path: " + constructFilePaths(XWalkRoot, "/Default/Local Storage/leveldb").getAbsolutePath());
+                db = LevelDB.open(target.getAbsolutePath());
+
+                byte[] SOH = { 1 };
+                byte[] ufile = "_file://".getBytes();
+                byte[] nullSOH = { 0, 1 };
+                byte[] origin = new byte[ufile.length + nullSOH.length];
+                System.arraycopy(ufile, 0, origin, 0, ufile.length);
+                System.arraycopy(nullSOH, 0, origin, ufile.length, nullSOH.length);
+
                 while(results.moveToNext()) {
-                    Log.d(TAG, "Local Storage Key:" + results.getString(0));
-                    byte[] aBlobVariableThatIWillDoAbsolutelyNothingWithPeriodSmileyFace = results.getBlob(1);
-                    Log.d(TAG, "Local Storage Value: this is a blob and can't really be displayed but, if you are seeing this message, we successfully got the blob from the result set.");
+                    byte[] key = results.getString(results.getColumnIndex("key")).getBytes();
+                    byte[] value = results.getBlob(results.getColumnIndex("value"));
 
-                    levelDB.put("leveldb".getBytes(), "Is awesome!".getBytes());
-                    String value = levelDB.get("leveldb".getBytes());
+                    byte[] keyBytes = new byte[origin.length + key.length];
+                    System.arraycopy(origin, 0, keyBytes, 0, origin.length);
+                    System.arraycopy(key, 0, keyBytes, origin.length, key.length);
 
-                    leveldb.put("magic".getBytes(), new byte[] { 0, 1, 2, 3, 4 });
-                    byte[] magic = levelDB.getBytes("magic".getBytes());
+                    byte[] valueBytes = new byte[SOH.length + value.length];
+                    System.arraycopy(SOH, 0, valueBytes, 0, SOH.length);
+                    System.arraycopy(value, 0, valueBytes, SOH.length, value.length);
+
+                    db.put(keyBytes, valueBytes);
 
                     Log.d(TAG, "Used LevelDB");
                 };
@@ -138,27 +153,17 @@ public class Migration extends CordovaPlugin {
                 if (ls != null) {
                     ls.close();
                 }
-                if (levelDB != null) {
-                    levelDB.close();
+                if (db != null) {
+                    db.close();
                 }
             }
             Log.d(TAG, "Finished migrating from localstorage to leveldb.");
             hasMigratedData = true;
         }
 
-        if(isModernAndroid){
-            for(String dirName : modernAndroidStorage){
-                if(testFileExists(XWalkRoot, dirName)) {
-                    moveDirFromXWalkToWebView(dirName);
-                    Log.d(TAG, "Moved " + dirName + " from XWalk to System Webview");
-                    hasMigratedData = true;
-                }
-            }
-        }
-
         if(hasMigratedData){
-            deleteRecursive(XWalkRoot);
-            restartCordova();
+            // deleteRecursive(constructFilePaths(XWalkRoot, '..'));
+            // restartCordova();
         }
     }
 
