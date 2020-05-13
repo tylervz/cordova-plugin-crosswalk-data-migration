@@ -118,7 +118,13 @@ public class Migration extends CordovaPlugin {
 
             File root = getStorageRootFromFiles(context.getFilesDir());
             Log.d(TAG, "Root: " + root.getAbsolutePath());
-            File target = constructFilePaths(root, "app_webview/Default/Local Storage/leveldb");
+            File localStorageDir = constructFilePaths(root, "app_webview/Default/Local Storage");
+            if (!localStorageDir.exists()) {
+                Log.d(TAG, "Missing local storage directory, creating it...");
+                localStorageDir.mkdirs();
+            }
+
+            File target = constructFilePaths(localStorageDir, "leveldb");
            if (target.exists()) {
                deleteRecursive(target);
            }
@@ -174,6 +180,7 @@ public class Migration extends CordovaPlugin {
                     Log.d(TAG, "Key: " + new String(key) + ", value: " + new String(value));
                 }
 
+                hasMigratedData = true;
             } catch (Exception e) {
                 Log.d(TAG, "Something went wrong. Here is an error message. " + e.getMessage());
             } finally {
@@ -188,7 +195,6 @@ public class Migration extends CordovaPlugin {
                 }
             }
             Log.d(TAG, "Finished migrating from localstorage to leveldb.");
-            hasMigratedData = true;
         }
 
         if(hasMigratedData){
