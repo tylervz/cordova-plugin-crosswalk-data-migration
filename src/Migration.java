@@ -154,10 +154,13 @@ public class Migration extends CordovaPlugin {
 
             sqliteDBFile.renameTo(constructFilePaths(localStorageDir, "https_localhost_0.localstorage"));
             sqliteDBJournalFile.renameTo(constructFilePaths(localStorageDir, "https_localhost_0.localstorage-journal"));
+
+            hasMigratedData = true;
         }
 
         if (hasMigratedData){
-            deleteRecursive(constructFilePaths(XWalkRoot, ".."));
+            Log.d(TAG, "XWALK ROOT DELETE: " + XWalkRoot.getParentFile());
+            deleteRecursive(XWalkRoot.getParentFile());
         }
     }
 
