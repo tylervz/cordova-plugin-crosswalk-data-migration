@@ -16,9 +16,13 @@ import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CordovaWebView;
 
 import java.io.File;
+import java.lang.reflect.Method;
 
 import com.github.hf.leveldb.LevelDB;
 import com.github.hf.leveldb.Iterator;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
+import android.webkit.WebView;
 
 public class Migration extends CordovaPlugin {
 
@@ -108,97 +112,129 @@ public class Migration extends CordovaPlugin {
         return sb2.toString();
     }
 
-     private void migrateData(){
+    private void migrateData(){
         XWalkRoot = constructFilePaths(appRoot, XwalkPath);
         webviewRoot = constructFilePaths(appRoot, getWebviewPath());
 
         boolean hasMigratedData = false;
+        File localStorageDir;
 
-        if(testFileExists(XWalkRoot, modernLocalStorageDir)){
+        PackageInfo webviewPkg;
+        if (Build.VERSION.SDK_INT >= 26) {
+            webviewPkg = WebView.getCurrentWebViewPackage();
+        }
+        else {
+            try {
+                Class webViewFactory = Class.forName("android.webkit.WebViewFactory");
+                Method method = webViewFactory.getMethod("getLoadedPackageInfo");
+                webviewPkg = (PackageInfo) method.invoke(null);
+            } catch (Exception e) {
+                e.printStackTrace();
+                return;
+            }
+        }
 
-            File root = getStorageRootFromFiles(context.getFilesDir());
-            Log.d(TAG, "Root: " + root.getAbsolutePath());
-            File localStorageDir = constructFilePaths(root, "app_webview/Default/Local Storage");
+        String versionParts[] = webviewPkg.versionName.split("\\.");
+        String strVersion = versionParts[0];
+        int version = Integer.parseInt(strVersion);
+
+        Log.d(TAG, "WEBVIEW VERSION: " + version);
+
+        if (version <= 78) {
+            localStorageDir = constructFilePaths(appRoot, "app_webview/Local Storage");
+        }
+        else {
+            localStorageDir = constructFilePaths(appRoot, "app_webview/Default/Local Storage");
+        }
+
+        if (testFileExists(XWalkRoot, modernLocalStorageDir)) {
+
             if (!localStorageDir.exists()) {
                 Log.d(TAG, "Missing local storage directory, creating it...");
                 localStorageDir.mkdirs();
             }
 
-            File target = constructFilePaths(localStorageDir, "leveldb");
-           if (target.exists()) {
-               deleteRecursive(target);
-           }
+            File sqliteDBFile = constructFilePaths(XWalkRoot, "Local Storage/file__0.localstorage");
+            File sqliteDBJournalFile = constructFilePaths(XWalkRoot, "Local Storage/file__0.localstorage-journal");
 
-            Log.d(TAG, "Migrating from sqlite local storage to leveldb local storage");
-            SQLiteDatabase ls = null;
-            Cursor results = null;
-            LevelDB db = null;
-            try {
-                ls = SQLiteDatabase.openDatabase(constructFilePaths(XWalkRoot, getWebviewLocalStoragePath()).getAbsolutePath() + "/file__0.localstorage", null, SQLiteDatabase.OPEN_READONLY);
-                results = ls.rawQuery("SELECT * FROM ItemTable", null);
-//                Log.d(TAG, "leveldb file path: " + constructFilePaths(XWalkRoot, "/Default/Local Storage/leveldb").getAbsolutePath());
-                db = LevelDB.open(target.getAbsolutePath());
+            sqliteDBFile.renameTo(constructFilePaths(localStorageDir, "https_localhost_0.localstorage"));
+            sqliteDBJournalFile.renameTo(constructFilePaths(localStorageDir, "https_localhost_0.localstorage-journal"));
 
-                byte[] SOH = { 1 };
-                byte[] ufile = "_https://localhost".getBytes();
-                byte[] nullSOH = { 0, 1 };
-                byte[] origin = new byte[ufile.length + nullSOH.length];
-                System.arraycopy(ufile, 0, origin, 0, ufile.length);
-                System.arraycopy(nullSOH, 0, origin, ufile.length, nullSOH.length);
+//            File target = constructFilePaths(localStorageDir, "leveldb");
+//            if (target.exists()) {
+//                deleteRecursive(target);
+//            }
 
-                while(results.moveToNext()) {
-                    byte[] key = results.getString(results.getColumnIndex("key")).getBytes("UTF-8");
-                    Log.d(TAG, "SQLITE KEY: " + new String(key) + " HEX: " + getHexString(key));
-
-                    byte[] value = new String(results.getBlob(results.getColumnIndex("value")), "UTF-16LE").getBytes("UTF-8");
-                    Log.d(TAG, "SQLITE VALUE: " + new String(value) + " HEX: " + getHexString(value));;
-
-                    byte[] keyBytes = new byte[origin.length + key.length];
-                    System.arraycopy(origin, 0, keyBytes, 0, origin.length);
-                    System.arraycopy(key, 0, keyBytes, origin.length, key.length);
-
-                    byte[] valueBytes = new byte[SOH.length + value.length];
-                    System.arraycopy(SOH, 0, valueBytes, 0, SOH.length);
-                    System.arraycopy(value, 0, valueBytes, SOH.length, value.length);
-
-                    Log.d(TAG, "INSERTING KEY: " + getHexString(keyBytes));
-                    db.put(keyBytes, valueBytes);
-
-                    Log.d(TAG, "Used LevelDB");
-                }
-
-                Iterator iterator = db.iterator();
-                for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
-                    byte[] key   = iterator.key();
-                    byte[] value = iterator.value();
-                    StringBuilder sb2 = new StringBuilder(value.length * 2);
-                    for (byte b: value) {
-                        sb2.append(String.format("%02x", b));
-                    }
-                    Log.d(TAG, "Value: " + new String(value));
-                    Log.d(TAG, "Value Hex: " + sb2.toString());
-                    Log.d(TAG, "Key: " + new String(key) + ", value: " + new String(value));
-                }
-
-                hasMigratedData = true;
-            } catch (Exception e) {
-                Log.d(TAG, "Something went wrong. Here is an error message. " + e.getMessage());
-            } finally {
-                if (results != null) {
-                    results.close();
-                }
-                if (ls != null) {
-                    ls.close();
-                }
-                if (db != null) {
-                    db.close();
-                }
-            }
-            Log.d(TAG, "Finished migrating from localstorage to leveldb.");
+//            Log.d(TAG, "Migrating from sqlite local storage to leveldb local storage");
+//            SQLiteDatabase ls = null;
+//            Cursor results = null;
+//            LevelDB db = null;
+//            try {
+//                ls = SQLiteDatabase.openDatabase(constructFilePaths(XWalkRoot, getWebviewLocalStoragePath()).getAbsolutePath() + "/file__0.localstorage", null, SQLiteDatabase.OPEN_READONLY);
+//                results = ls.rawQuery("SELECT * FROM ItemTable", null);
+////                Log.d(TAG, "leveldb file path: " + constructFilePaths(XWalkRoot, "/Default/Local Storage/leveldb").getAbsolutePath());
+//                db = LevelDB.open(target.getAbsolutePath());
+//
+//                byte[] SOH = { 1 };
+//                byte[] ufile = "_https://localhost".getBytes();
+//                byte[] nullSOH = { 0, 1 };
+//                byte[] origin = new byte[ufile.length + nullSOH.length];
+//                System.arraycopy(ufile, 0, origin, 0, ufile.length);
+//                System.arraycopy(nullSOH, 0, origin, ufile.length, nullSOH.length);
+//
+//                while(results.moveToNext()) {
+//                    byte[] key = results.getString(results.getColumnIndex("key")).getBytes("UTF-8");
+//                    Log.d(TAG, "SQLITE KEY: " + new String(key) + " HEX: " + getHexString(key));
+//
+//                    byte[] value = new String(results.getBlob(results.getColumnIndex("value")), "UTF-16LE").getBytes("UTF-8");
+//                    Log.d(TAG, "SQLITE VALUE: " + new String(value) + " HEX: " + getHexString(value));;
+//
+//                    byte[] keyBytes = new byte[origin.length + key.length];
+//                    System.arraycopy(origin, 0, keyBytes, 0, origin.length);
+//                    System.arraycopy(key, 0, keyBytes, origin.length, key.length);
+//
+//                    byte[] valueBytes = new byte[SOH.length + value.length];
+//                    System.arraycopy(SOH, 0, valueBytes, 0, SOH.length);
+//                    System.arraycopy(value, 0, valueBytes, SOH.length, value.length);
+//
+//                    Log.d(TAG, "INSERTING KEY: " + getHexString(keyBytes));
+//                    db.put(keyBytes, valueBytes);
+//
+//                    Log.d(TAG, "Used LevelDB");
+//                }
+//
+//                Iterator iterator = db.iterator();
+//                for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
+//                    byte[] key   = iterator.key();
+//                    byte[] value = iterator.value();
+//                    StringBuilder sb2 = new StringBuilder(value.length * 2);
+//                    for (byte b: value) {
+//                        sb2.append(String.format("%02x", b));
+//                    }
+//                    Log.d(TAG, "Value: " + new String(value));
+//                    Log.d(TAG, "Value Hex: " + sb2.toString());
+//                    Log.d(TAG, "Key: " + new String(key) + ", value: " + new String(value));
+//                }
+//
+//                hasMigratedData = true;
+//            } catch (Exception e) {
+//                Log.d(TAG, "Something went wrong. Here is an error message. " + e.getMessage());
+//            } finally {
+//                if (results != null) {
+//                    results.close();
+//                }
+//                if (ls != null) {
+//                    ls.close();
+//                }
+//                if (db != null) {
+//                    db.close();
+//                }
+//            }
+//            Log.d(TAG, "Finished migrating from localstorage to leveldb.");
         }
 
         if(hasMigratedData){
-            // deleteRecursive(constructFilePaths(XWalkRoot, '..'));
+//             deleteRecursive(constructFilePaths(XWalkRoot, ".."));
             //  restartCordova();
         }
     }
