@@ -26,7 +26,8 @@ public class Migration extends CordovaPlugin {
 
     private static boolean hasRun = false;
 
-    private static String XwalkPath = "app_xwalkcore/Default";
+    // TODO: delete this path if it ends up being unused when the plugin is working
+    private static String LocalStoragePath = "app_xwalkcore/Default";
 
     // Root dir for system webview data used by Android 4.4+
     private static String modernWebviewDir = "app_webview";
@@ -54,7 +55,7 @@ public class Migration extends CordovaPlugin {
 
     private boolean isModernAndroid;
     private File appRoot;
-    private File XWalkRoot;
+    //private File XWalkRoot;
     private File webviewRoot;
 
     public Migration() {}
@@ -75,11 +76,11 @@ public class Migration extends CordovaPlugin {
     }
 
     private void run(){
-        Log.d(TAG, "running Crosswalk migration shim");
+        Log.d(TAG, "running local storage migration shim");
 
-        boolean found = lookForXwalk(context.getFilesDir());
+        boolean found = lookForStorage(context.getFilesDir());
         if(!found){
-            lookForXwalk(context.getExternalFilesDir(null));
+            lookForStorage(context.getExternalFilesDir(null));
         }
 
         if(found){
@@ -87,14 +88,43 @@ public class Migration extends CordovaPlugin {
         }
     }
 
-    private boolean lookForXwalk(File filesPath){
+    private boolean lookForStorage(File filesPath){
         File root = getStorageRootFromFiles(filesPath);
-        boolean found = testFileExists(root, XwalkPath);
+        File localStorageDir;
+
+        PackageInfo webviewPkg;
+        if (Build.VERSION.SDK_INT >= 26) {
+            webviewPkg = WebView.getCurrentWebViewPackage();
+        }
+        else {
+            try {
+                Class webViewFactory = Class.forName("android.webkit.WebViewFactory");
+                Method method = webViewFactory.getMethod("getLoadedPackageInfo");
+                webviewPkg = (PackageInfo) method.invoke(null);
+                throw new Exception("test");
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        String versionParts[] = webviewPkg.versionName.split("\\.");
+        String strVersion = versionParts[0];
+        int version = Integer.parseInt(strVersion);
+
+        if (version <= 78) {
+            localStorageDir = constructFilePaths(root, "app_webview/Local Storage");
+        }
+        else {
+            localStorageDir = constructFilePaths(root, "app_webview/Default/Local Storage");
+        }
+
+        boolean found = testFileExists(localStorageDir);
         if(found){
-            Log.d(TAG, "found Crosswalk directory");
+            Log.d(TAG, "found the Local Storage directory");
             appRoot = root;
         }else{
-            Log.d(TAG, "Crosswalk directory NOT FOUND");
+            Log.d(TAG, "Local Storage directory NOT FOUND");
         }
         return found;
     }
@@ -109,7 +139,7 @@ public class Migration extends CordovaPlugin {
     }
 
     private void migrateData(){
-        XWalkRoot = constructFilePaths(appRoot, XwalkPath);
+        //XWalkRoot = constructFilePaths(appRoot, LocalStoragePath);
         webviewRoot = constructFilePaths(appRoot, getWebviewPath());
 
         boolean hasMigratedData = false;
@@ -142,15 +172,30 @@ public class Migration extends CordovaPlugin {
             localStorageDir = constructFilePaths(appRoot, "app_webview/Default/Local Storage");
         }
 
-        if (testFileExists(XWalkRoot, modernLocalStorageDir)) {
+        // TODO: delete these after testing. Right now none of them exist
+        testFileExists(localStorageDir, "file__0.localstorage");
+        testFileExists(localStorageDir, "file__0.localstorage-journal");
+        testFileExists(localStorageDir, "https_localhost_0.localstorage");
+        testFileExists(localStorageDir, "https_localhost_0.localstorage-journal");
+        testFileExists(localStorageDir, "leveldb");
 
-            if (!localStorageDir.exists()) {
-                Log.d(TAG, "Missing local storage directory, creating it...");
-                localStorageDir.mkdirs();
-            }
+        String[] pathnames;
+        // Populates the array with names of files and directories
+        pathnames = localStorageDir.list();
 
-            File sqliteDBFile = constructFilePaths(XWalkRoot, "Local Storage/file__0.localstorage");
-            File sqliteDBJournalFile = constructFilePaths(XWalkRoot, "Local Storage/file__0.localstorage-journal");
+        // For each pathname in the pathnames array
+        assert pathnames != null;
+        for (String pathname : pathnames) {
+            // Print the names of files and directories
+            Log.d(TAG, pathname);
+        }
+
+        if (testFileExists(localStorageDir, "file__0.localstorage")) {
+            // TODO: test that this change works. I haven't run the app with a SQLite DB yet that needed to be migrated.
+            File sqliteDBFile = constructFilePaths(localStorageDir, "file__0.localstorage");
+            File sqliteDBJournalFile = constructFilePaths(localStorageDir, "file__0.localstorage-journal");
+            //File sqliteDBFile = constructFilePaths(XWalkRoot, "Local Storage/file__0.localstorage");
+            //File sqliteDBJournalFile = constructFilePaths(XWalkRoot, "Local Storage/file__0.localstorage-journal");
 
             sqliteDBFile.renameTo(constructFilePaths(localStorageDir, "https_localhost_0.localstorage"));
             sqliteDBJournalFile.renameTo(constructFilePaths(localStorageDir, "https_localhost_0.localstorage-journal"));
@@ -159,8 +204,9 @@ public class Migration extends CordovaPlugin {
         }
 
         if (hasMigratedData){
-            Log.d(TAG, "XWALK ROOT DELETE: " + XWalkRoot.getParentFile());
-            deleteRecursive(XWalkRoot.getParentFile());
+            Log.d(TAG, "MIGRATED DATA: " + localStorageDir.getParentFile());
+            //Log.d(TAG, "XWALK ROOT DELETE: " + XWalkRoot.getParentFile());
+            //deleteRecursive(XWalkRoot.getParentFile());
         }
     }
 
@@ -193,6 +239,12 @@ public class Migration extends CordovaPlugin {
             status = newPath.exists();
             Log.d(TAG, "exists '"+newPath.getAbsolutePath()+": "+status);
         }
+        return status;
+    }
+
+    private boolean testFileExists(File root) {
+        boolean status = root.exists();
+        Log.d(TAG, "exists '"+root.getAbsolutePath()+": "+status);
         return status;
     }
 
