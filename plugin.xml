@@ -5,15 +5,15 @@
     version="1.0.0">
 
     <name>Crosswalk Data Migration Plugin</name>
-    <description>Cordova/Phonegap plugin for Android to preserve persistent webview data after removing Crosswalk from your app.</description>
+    <description>Cordova/Phonegap plugin for Android to preserve persistent webview data after upgrading your app to cordova-android 10.x+.</description>
     <author>Dave Alden</author>
     <license>MIT</license>
-    <keywords>cordova,phonegap,android,crosswalk</keywords>
+    <keywords>cordova,phonegap,android,local storage</keywords>
     <engines>
         <engine name="cordova" version=">=3.0.0" />
     </engines>
-    <repo>https://github.com/dpa99c/cordova-plugin-crosswalk-data-migration.git</repo>
-    <issue>https://github.com/dpa99c/cordova-plugin-crosswalk-data-migration/issues</issue>
+    <repo>https://github.com/tylervz/cordova-plugin-crosswalk-data-migration</repo>
+    <issue>https://github.com/tylervz/cordova-plugin-crosswalk-data-migration/issues</issue>
 
 
     <!-- android -->
