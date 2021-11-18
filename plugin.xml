@@ -25,6 +25,8 @@
             </feature>
         </config-file>
 
+        <framework src="./build-extras.gradle" custom="true" type="gradleReference" />
+        <resource-file src="leveldb/leveldb-release.aar" target="libs/leveldb-release.aar" />
         <source-file src="src/Migration.java" target-dir="src/cordova/plugins/crosswalk" />
     </platform>
 </plugin>

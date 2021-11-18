@@ -1,0 +1,24 @@
+// Allow plugins to declare Maven dependencies via build-extras.gradle.
+allprojects {
+    repositories {
+        mavenCentral()
+        flatDir {
+            dirs 'libs'
+        }
+    }
+}
+
+dependencies {
+  // Add the local leveldb aar library which was built from https://github.com/tylervz/leveldb-android
+  // by running `.gradlew clean build` and then getting the file from leveldb/build/outputs/aar
+  // This file is also referenced in plugin.xml
+  implementation(name: 'leveldb-release', ext: 'aar')
+  // compile(name: 'leveldb-release', ext: 'aar')
+}
+
+android {
+    packagingOptions {
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/LICENSE'
+    }
+}
